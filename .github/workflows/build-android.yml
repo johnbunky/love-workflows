@@ -63,13 +63,9 @@ jobs:
        
       - name: Verify keystore
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > test.keystore
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | tr -d '[:space:]' | base64 -d > test.keystore
           keytool -list -v -keystore test.keystore \
-            -storepass "${{ secrets.KEYSTORE_PASSWORD }}" \
-            -storetype PKCS12 || \
-          keytool -list -v -keystore test.keystore \
-            -storepass "${{ secrets.KEYSTORE_PASSWORD }}" \
-            -storetype JKS
+            -storepass "${{ secrets.KEYSTORE_PASSWORD }}"
           rm test.keystore
           
       # version-code = run_number, auto-increments on every build
