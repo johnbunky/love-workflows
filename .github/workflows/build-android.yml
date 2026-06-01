@@ -47,8 +47,8 @@ jobs:
             --exclude "android/*"
             
       - name: Generate default icons
+        if: ${{ hashFiles('android/res/**') == '' }}
         run: |
-          if: ${{ !hashFiles('android/res/**') }}
           sudo apt-get install -y imagemagick -q
           for d_size in "mdpi 48" "hdpi 72" "xhdpi 96" "xxhdpi 144" "xxxhdpi 192"; do
             d=$(echo $d_size | cut -d' ' -f1)
