@@ -60,7 +60,13 @@ jobs:
               -annotate 0 "LOVE" \
               android/res/mipmap-$d/ic_launcher.png
           done
-       
+          
+      - name: Checkout love-workflows
+        uses: actions/checkout@v4
+        with:
+          repository: johnbunky/love-workflows
+          path: love-workflows
+          
       - name: Verify keystore
         run: |
           keytool -list -v \
