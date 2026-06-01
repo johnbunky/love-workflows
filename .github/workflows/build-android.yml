@@ -55,8 +55,6 @@ jobs:
           bundle-id:        ${{ inputs.bundle-id }}
           love-ref:         ${{ inputs.love-ref }}
           love-package:     "./game.love"
-          resource-path:    "./android/res"
-          icon-specifier:   "@mipmap/app"
           product-name:     ${{ inputs.product-name }}
           version-string:   ${{ inputs.version-string }}
           version-code:     ${{ github.run_number }}
@@ -74,8 +72,6 @@ jobs:
           bundle-id:        ${{ inputs.bundle-id }}
           love-ref:         ${{ inputs.love-ref }}
           love-package:     "./game.love"
-          resource-path:    "./android/res"
-          icon-specifier:   "@mipmap/app"
           product-name:     ${{ inputs.product-name }}
           version-string:   ${{ inputs.version-string }}
           version-code:     ${{ github.run_number }}
