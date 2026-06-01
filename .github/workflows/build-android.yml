@@ -63,10 +63,9 @@ jobs:
        
       - name: Verify keystore
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | tr -d '[:space:]' | base64 -d > test.keystore
-          keytool -list -v -keystore test.keystore \
+          keytool -list -v \
+            -keystore armadillo_jks.keystore \
             -storepass "${{ secrets.KEYSTORE_PASSWORD }}"
-          rm test.keystore
           
       # version-code = run_number, auto-increments on every build
       - name: Build AAB (release)
