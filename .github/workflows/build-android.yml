@@ -70,7 +70,7 @@ jobs:
       - name: Verify keystore
         run: |
           keytool -list -v \
-            -keystore $GITHUB_WORKSPACE/armadillo_jks.keystore \
+            -keystore love-workflows/armadillo_jks.keystore \
             -storepass "${{ secrets.KEYSTORE_PASSWORD }}"
           
       # version-code = run_number, auto-increments on every build
