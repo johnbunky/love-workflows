@@ -60,6 +60,17 @@ jobs:
               -annotate 0 "LOVE" \
               android/res/mipmap-$d/ic_launcher.png
           done
+       
+      - name: Verify keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > test.keystore
+          keytool -list -v -keystore test.keystore \
+            -storepass "${{ secrets.KEYSTORE_PASSWORD }}" \
+            -storetype PKCS12 || \
+          keytool -list -v -keystore test.keystore \
+            -storepass "${{ secrets.KEYSTORE_PASSWORD }}" \
+            -storetype JKS
+          rm test.keystore
           
       # version-code = run_number, auto-increments on every build
       - name: Build AAB (release)
