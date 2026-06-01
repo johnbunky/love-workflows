@@ -89,7 +89,7 @@ jobs:
           version-code:     ${{ github.run_number }}
           output-folder:    "./dist"
           keystore-alias:          ${{ secrets.KEY_ALIAS }}
-          keystore-base64:         ${{ secrets.KEYSTORE_BASE64 }}
+          keystore-path:           love-workflows/armadillo_jks.keystore
           keystore-key-password:   ${{ secrets.KEY_PASSWORD }}
           keystore-store-password: ${{ secrets.KEYSTORE_PASSWORD }}
 
