@@ -1,0 +1,90 @@
+name: Build Android (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      app-name:
+        required: true
+        type: string
+      bundle-id:
+        required: true
+        type: string
+      product-name:
+        required: true
+        type: string
+      love-ref:
+        required: false
+        type: string
+        default: "11.5"
+      version-string:
+        required: false
+        type: string
+        default: "1.0"
+      build-apk:           # true = APK (test), false = AAB (release)
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout game repo
+        uses: actions/checkout@v4
+
+      - name: Pack .love file
+        run: |
+          zip -9 -r game.love . \
+            --include "*.lua" \
+            --include "*.png" --include "*.jpg" --include "*.jpeg" \
+            --include "*.ogg" --include "*.wav" --include "*.mp3" \
+            --include "*.ttf" --include "*.otf" --include "*.fnt" \
+            --include "*.json" --include "*.xml" \
+            --exclude ".git/*" \
+            --exclude ".github/*" \
+            --exclude "android/*"
+
+      # version-code = run_number, auto-increments on every build
+      - name: Build AAB (release)
+        if: ${{ !inputs.build-apk }}
+        uses: love-actions/love-actions-android@v2
+        with:
+          app-name:         ${{ inputs.app-name }}
+          bundle-id:        ${{ inputs.bundle-id }}
+          love-ref:         ${{ inputs.love-ref }}
+          love-package:     "./game.love"
+          resource-path:    "./android/res"
+          icon-specifier:   "@mipmap/app"
+          product-name:     ${{ inputs.product-name }}
+          version-string:   ${{ inputs.version-string }}
+          version-code:     ${{ github.run_number }}
+          output-folder:    "./dist"
+          keystore-alias:          ${{ secrets.KEY_ALIAS }}
+          keystore-base64:         ${{ secrets.KEYSTORE_BASE64 }}
+          keystore-key-password:   ${{ secrets.KEY_PASSWORD }}
+          keystore-store-password: ${{ secrets.KEYSTORE_PASSWORD }}
+
+      - name: Build APK (test)
+        if: ${{ inputs.build-apk }}
+        uses: love-actions/love-actions-android@v2
+        with:
+          app-name:         ${{ inputs.app-name }}
+          bundle-id:        ${{ inputs.bundle-id }}
+          love-ref:         ${{ inputs.love-ref }}
+          love-package:     "./game.love"
+          resource-path:    "./android/res"
+          icon-specifier:   "@mipmap/app"
+          product-name:     ${{ inputs.product-name }}
+          version-string:   ${{ inputs.version-string }}
+          version-code:     ${{ github.run_number }}
+          output-folder:    "./dist"
+          # No keystore = debug APK, sideloadable immediately
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.product-name }}-${{ inputs.build-apk && 'apk' || 'aab' }}-${{ github.run_number }}
+          path: ./dist/
+          retention-days: 30
