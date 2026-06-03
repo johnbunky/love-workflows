@@ -127,6 +127,9 @@ jobs:
       - name: Patch app properties
         if: ${{ !inputs.build-apk }}
         run: |
+          # Comment out app.name_byte_array in root gradle.properties to avoid conflict
+          sed -i 's/^app\.name_byte_array/# app.name_byte_array/' love-android/gradle.properties
+          
           cat > love-android/app/gradle.properties << EOF
           app.application_id=${{ inputs.bundle-id }}
           app.version_code=${{ github.run_number }}
