@@ -32,6 +32,10 @@ on:
         required: false
       KEYSTORE_PASSWORD:
         required: false
+      KEYSTORE_B64_1:
+        required: false
+      KEYSTORE_B64_2:
+        required: false   
 
 jobs:
   build:
