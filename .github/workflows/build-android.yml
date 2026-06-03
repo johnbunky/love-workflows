@@ -42,7 +42,6 @@ jobs:
       - name: Checkout game repo
         uses: actions/checkout@v4
 
-      # Checkout love-workflows to access the committed keystore file
       - name: Checkout love-workflows
         if: ${{ !inputs.build-apk }}
         uses: actions/checkout@v4
@@ -84,7 +83,7 @@ jobs:
               android/res/mipmap-$d/ic_launcher.png
           done
 
-      # ── TEST APK (debug, arm64 only, no signing) ──────────────────────────────
+      # ── TEST APK (debug, no signing) ─────────────────────────────────────────
       - name: Build APK (test)
         if: ${{ inputs.build-apk }}
         uses: love-actions/love-actions-android@v2
@@ -99,11 +98,8 @@ jobs:
           version-string: ${{ inputs.version-string }}
           version-code:   ${{ github.run_number }}
           output-folder:  ./dist
-          extra-assets:   "-Pandroid.injected.build.abi=arm64-v8a"
-          # arm64 only — half the size, enough for testing
-          libs-path:      ""
 
-      # ── RELEASE AAB (raw Gradle — action doesn't support AAB) ────────────────
+      # ── RELEASE AAB (raw Gradle) ──────────────────────────────────────────────
       - name: Clone love-android
         if: ${{ !inputs.build-apk }}
         run: |
@@ -127,36 +123,16 @@ jobs:
       - name: Patch app properties
         if: ${{ !inputs.build-apk }}
         run: |
-          # Comment out app.name_byte_array in root gradle.properties to avoid conflict
-          sed -i 's/^app\.name_byte_array/# app.name_byte_array/' love-android/gradle.properties
-          
-          cat > love-android/app/gradle.properties << EOF
-          app.application_id=${{ inputs.bundle-id }}
-          app.version_code=${{ github.run_number }}
-          app.version_name=${{ inputs.version-string }}
-          app.name=${{ inputs.app-name }}
-          app.orientation=landscape
-          EOF
-          
-      - name: Debug gradle.properties
-        if: ${{ !inputs.build-apk }}
-        run: |
-          echo "=== app/gradle.properties ==="
-          cat love-android/app/gradle.properties
-          echo "=== gradle.properties ==="
-          cat love-android/gradle.properties   
-          
-      - name: Debug build.gradle
-        if: ${{ !inputs.build-apk }}
-        run: |
-          echo "=== build.gradle ==="
-          cat -n love-android/app/build.gradle
-          
-      - name: Tune Gradle heap
-        if: ${{ !inputs.build-apk }}
-        run: |
-          echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=512m" \
-            >> love-android/gradle.properties
+          PROPS="love-android/gradle.properties"
+          sed -i 's/^app\.name_byte_array/# app.name_byte_array/' "$PROPS"
+          sed -i 's/^#app\.name_byte_array/# app.name_byte_array/' "$PROPS"
+          sed -i "s|^app\.application_id=.*|app.application_id=${{ inputs.bundle-id }}|" "$PROPS"
+          sed -i "s|^app\.version_code=.*|app.version_code=${{ github.run_number }}|" "$PROPS"
+          sed -i "s|^app\.version_name=.*|app.version_name=${{ inputs.version-string }}|" "$PROPS"
+          sed -i "s|^app\.orientation=.*|app.orientation=landscape|" "$PROPS"
+          echo "app.name=${{ inputs.app-name }}" >> "$PROPS"
+          sed -i "s|^org\.gradle\.jvmargs=.*|org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=512m|" "$PROPS"
+          sed -i "s|minSdk [0-9]*|minSdk 21|" love-android/app/build.gradle
 
       - name: Build AAB
         if: ${{ !inputs.build-apk }}
@@ -174,8 +150,7 @@ jobs:
             -keystore "$GITHUB_WORKSPACE/love-workflows/armadillo_jks.keystore" \
             -storepass "${{ secrets.KEYSTORE_PASSWORD }}" \
             -keypass   "${{ secrets.KEY_PASSWORD }}" \
-            "$AAB" \
-            "${{ secrets.KEY_ALIAS }}"
+            "$AAB" "${{ secrets.KEY_ALIAS }}"
           mkdir -p dist
           cp "$AAB" "dist/${{ inputs.product-name }}-release.aab"
 
