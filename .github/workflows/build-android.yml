@@ -128,6 +128,8 @@ jobs:
         if: ${{ !inputs.build-apk }}
         run: |
           PROPS="love-android/app/gradle.properties"
+          # Remove existing name entries to avoid conflict
+          sed -i '/^app\.name/d' "$PROPS"
           cat >> "$PROPS" << EOF
           app.application_id=${{ inputs.bundle-id }}
           app.version_code=${{ github.run_number }}
