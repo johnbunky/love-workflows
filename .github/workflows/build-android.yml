@@ -143,18 +143,17 @@ jobs:
       - name: Sign AAB
         if: ${{ !inputs.build-apk }}
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | tr -d '[:space:]' | base64 -d > signing.keystore
           AAB=$(find love-android -name "*.aab" | head -1)
           jarsigner -verbose \
             -sigalg SHA256withRSA \
             -digestalg SHA-256 \
-            -keystore signing.keystore \
+            -keystore "$GITHUB_WORKSPACE/love-workflows/armadillo.keystore" \
+            -storetype PKCS12 \
             -storepass "${{ secrets.KEYSTORE_PASSWORD }}" \
             -keypass   "${{ secrets.KEY_PASSWORD }}" \
             "$AAB" "${{ secrets.KEY_ALIAS }}"
           mkdir -p dist
           cp "$AAB" "dist/${{ inputs.product-name }}-release.aab"
-          rm signing.keystore
 
       # ── ARTIFACT ─────────────────────────────────────────────────────────────
       - name: Upload artifact
