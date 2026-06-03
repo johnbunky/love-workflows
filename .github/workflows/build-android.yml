@@ -127,10 +127,7 @@ jobs:
       - name: Patch app properties
         if: ${{ !inputs.build-apk }}
         run: |
-          PROPS="love-android/app/gradle.properties"
-          # Remove existing name entries to avoid conflict
-          sed -i '/^app\.name/d' "$PROPS"
-          cat >> "$PROPS" << EOF
+          cat > love-android/app/gradle.properties << EOF
           app.application_id=${{ inputs.bundle-id }}
           app.version_code=${{ github.run_number }}
           app.version_name=${{ inputs.version-string }}
