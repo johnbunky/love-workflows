@@ -135,11 +135,20 @@ jobs:
           app.orientation=landscape
           EOF
           
+      - name: Debug gradle.properties
+        if: ${{ !inputs.build-apk }}
+        run: |
+          echo "=== app/gradle.properties ==="
+          cat love-android/app/gradle.properties
+          echo "=== gradle.properties ==="
+          cat love-android/gradle.properties   
+          
       - name: Debug build.gradle
         if: ${{ !inputs.build-apk }}
         run: |
           echo "=== build.gradle ==="
           cat -n love-android/app/build.gradle
+          
       - name: Tune Gradle heap
         if: ${{ !inputs.build-apk }}
         run: |
