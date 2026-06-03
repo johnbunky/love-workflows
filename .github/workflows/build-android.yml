@@ -124,13 +124,17 @@ jobs:
         run: |
           cp -r android/res/* love-android/app/src/main/res/
 
-      - name: Patch bundle ID and version
+      - name: Patch app properties
         if: ${{ !inputs.build-apk }}
         run: |
-          GRADLE="love-android/app/build.gradle"
-          sed -i "s|applicationId \"org.love2d.android\"|applicationId \"${{ inputs.bundle-id }}\"|g" "$GRADLE"
-          sed -i "s|versionCode [0-9]*|versionCode ${{ github.run_number }}|g"                        "$GRADLE"
-          sed -i "s|versionName \"[^\"]*\"|versionName \"${{ inputs.version-string }}\"|g"            "$GRADLE"
+          PROPS="love-android/app/gradle.properties"
+          cat >> "$PROPS" << EOF
+          app.application_id=${{ inputs.bundle-id }}
+          app.version_code=${{ github.run_number }}
+          app.version_name=${{ inputs.version-string }}
+          app.name=${{ inputs.app-name }}
+          app.orientation=landscape
+          EOF
           
       - name: Debug build.gradle
         if: ${{ !inputs.build-apk }}
