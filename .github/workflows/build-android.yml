@@ -48,7 +48,15 @@ jobs:
         with:
           repository: johnbunky/love-workflows
           path: love-workflows
-
+          
+      - name: Debug keystore secret
+        if: ${{ !inputs.build-apk }}
+        run: |
+          echo "Base64 length:"
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | tr -d '[:space:]' | wc -c
+          echo "Decoded size:"
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | tr -d '[:space:]' | base64 -d | wc -c
+          
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
