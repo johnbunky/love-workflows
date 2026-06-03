@@ -131,7 +131,12 @@ jobs:
           sed -i "s|applicationId \"org.love2d.android\"|applicationId \"${{ inputs.bundle-id }}\"|g" "$GRADLE"
           sed -i "s|versionCode [0-9]*|versionCode ${{ github.run_number }}|g"                        "$GRADLE"
           sed -i "s|versionName \"[^\"]*\"|versionName \"${{ inputs.version-string }}\"|g"            "$GRADLE"
-
+          
+      - name: Debug build.gradle
+        if: ${{ !inputs.build-apk }}
+        run: |
+          echo "=== build.gradle ==="
+          cat -n love-android/app/build.gradle
       - name: Tune Gradle heap
         if: ${{ !inputs.build-apk }}
         run: |
