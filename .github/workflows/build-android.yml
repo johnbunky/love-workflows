@@ -20,10 +20,18 @@ on:
         required: false
         type: string
         default: "1.0"
-      build-apk:           # true = APK (test), false = AAB (release)
+      build-apk:
         required: false
         type: boolean
         default: false
+
+    secrets:
+      KEY_ALIAS:
+        required: false
+      KEY_PASSWORD:
+        required: false
+      KEYSTORE_PASSWORD:
+        required: false
 
 jobs:
   build:
@@ -33,6 +41,20 @@ jobs:
 
       - name: Checkout game repo
         uses: actions/checkout@v4
+
+      # Checkout love-workflows to access the committed keystore file
+      - name: Checkout love-workflows
+        if: ${{ !inputs.build-apk }}
+        uses: actions/checkout@v4
+        with:
+          repository: johnbunky/love-workflows
+          path: love-workflows
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
 
       - name: Pack .love file
         run: |
@@ -44,8 +66,9 @@ jobs:
             --include "*.json" --include "*.xml" \
             --exclude ".git/*" \
             --exclude ".github/*" \
-            --exclude "android/*"
-            
+            --exclude "android/*" \
+            --exclude "love-workflows/*"
+
       - name: Generate default icons
         if: ${{ hashFiles('android/res/**') == '' }}
         run: |
@@ -60,58 +83,86 @@ jobs:
               -annotate 0 "LOVE" \
               android/res/mipmap-$d/ic_launcher.png
           done
-          
-      - name: Checkout love-workflows
-        uses: actions/checkout@v4
-        with:
-          repository: johnbunky/love-workflows
-          path: love-workflows
-          
-      - name: Verify keystore
-        run: |
-          keytool -list -v \
-            -keystore love-workflows/armadillo_jks.keystore \
-            -storepass "${{ secrets.KEYSTORE_PASSWORD }}"
-          
-      # version-code = run_number, auto-increments on every build
-      - name: Build AAB (release)
-        if: ${{ !inputs.build-apk }}
-        uses: love-actions/love-actions-android@v2
-        with:
-          app-name:         ${{ inputs.app-name }}
-          bundle-id:        ${{ inputs.bundle-id }}
-          love-ref:         ${{ inputs.love-ref }}
-          love-package:     "./game.love"
-          resource-path:    "./android/res"
-          icon-specifier:   "@mipmap/ic_launcher"
-          product-name:     ${{ inputs.product-name }}
-          version-string:   ${{ inputs.version-string }}
-          version-code:     ${{ github.run_number }}
-          output-folder:    "./dist"
-          keystore-alias:          ${{ secrets.KEY_ALIAS }}
-          keystore-path:           love-workflows/armadillo_jks.keystore
-          keystore-key-password:   ${{ secrets.KEY_PASSWORD }}
-          keystore-store-password: ${{ secrets.KEYSTORE_PASSWORD }}
 
+      # ── TEST APK (debug, arm64 only, no signing) ──────────────────────────────
       - name: Build APK (test)
         if: ${{ inputs.build-apk }}
         uses: love-actions/love-actions-android@v2
         with:
-          app-name:         ${{ inputs.app-name }}
-          bundle-id:        ${{ inputs.bundle-id }}
-          love-ref:         ${{ inputs.love-ref }}
-          love-package:     "./game.love"
-          resource-path:    "./android/res"
-          icon-specifier:   "@mipmap/ic_launcher"
-          product-name:     ${{ inputs.product-name }}
-          version-string:   ${{ inputs.version-string }}
-          version-code:     ${{ github.run_number }}
-          output-folder:    "./dist"
-          # No keystore = debug APK, sideloadable immediately
+          app-name:       ${{ inputs.app-name }}
+          bundle-id:      ${{ inputs.bundle-id }}
+          love-ref:       ${{ inputs.love-ref }}
+          love-package:   ./game.love
+          resource-path:  ./android/res
+          icon-specifier: "@mipmap/ic_launcher"
+          product-name:   ${{ inputs.product-name }}
+          version-string: ${{ inputs.version-string }}
+          version-code:   ${{ github.run_number }}
+          output-folder:  ./dist
+          extra-assets:   ""
+          # arm64 only — half the size, enough for testing
+          libs-path:      ""
 
+      # ── RELEASE AAB (raw Gradle — action doesn't support AAB) ────────────────
+      - name: Clone love-android
+        if: ${{ !inputs.build-apk }}
+        run: |
+          git clone --recurse-submodules \
+            --branch "${{ inputs.love-ref }}" \
+            --depth 1 \
+            https://github.com/love2d/love-android \
+            love-android
+
+      - name: Inject game.love
+        if: ${{ !inputs.build-apk }}
+        run: |
+          mkdir -p love-android/app/src/embed/assets
+          cp game.love love-android/app/src/embed/assets/game.love
+
+      - name: Copy icons
+        if: ${{ !inputs.build-apk }}
+        run: |
+          cp -r android/res/* love-android/app/src/main/res/
+
+      - name: Patch bundle ID and version
+        if: ${{ !inputs.build-apk }}
+        run: |
+          GRADLE="love-android/app/build.gradle"
+          sed -i "s|applicationId \"org.love2d.android\"|applicationId \"${{ inputs.bundle-id }}\"|g" "$GRADLE"
+          sed -i "s|versionCode [0-9]*|versionCode ${{ github.run_number }}|g"                        "$GRADLE"
+          sed -i "s|versionName \"[^\"]*\"|versionName \"${{ inputs.version-string }}\"|g"            "$GRADLE"
+
+      - name: Tune Gradle heap
+        if: ${{ !inputs.build-apk }}
+        run: |
+          echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=512m" \
+            >> love-android/gradle.properties
+
+      - name: Build AAB
+        if: ${{ !inputs.build-apk }}
+        run: |
+          cd love-android
+          ./gradlew bundleEmbedNoRecordRelease --no-daemon
+
+      - name: Sign AAB
+        if: ${{ !inputs.build-apk }}
+        run: |
+          AAB=$(find love-android -name "*.aab" | head -1)
+          jarsigner -verbose \
+            -sigalg SHA256withRSA \
+            -digestalg SHA-256 \
+            -keystore "$GITHUB_WORKSPACE/love-workflows/armadillo_jks.keystore" \
+            -storepass "${{ secrets.KEYSTORE_PASSWORD }}" \
+            -keypass   "${{ secrets.KEY_PASSWORD }}" \
+            "$AAB" \
+            "${{ secrets.KEY_ALIAS }}"
+          mkdir -p dist
+          cp "$AAB" "dist/${{ inputs.product-name }}-release.aab"
+
+      # ── ARTIFACT ─────────────────────────────────────────────────────────────
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.product-name }}-${{ inputs.build-apk && 'apk' || 'aab' }}-${{ github.run_number }}
-          path: ./dist/
+          path: dist/
           retention-days: 30
