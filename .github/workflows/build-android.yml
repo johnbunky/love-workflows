@@ -92,6 +92,10 @@ jobs:
         run: |
           PROPS="love-android/gradle.properties"
 
+          # REMOVE conflicting key completely
+          sed -i '/^app\.name_byte_array/d' "$PROPS"
+
+          # Set values
           sed -i "s|^app\.application_id=.*|app.application_id=${{ inputs.bundle-id }}|" "$PROPS"
           sed -i "s|^app\.version_code=.*|app.version_code=${{ github.run_number }}|" "$PROPS"
           sed -i "s|^app\.version_name=.*|app.version_name=${{ inputs.version-string }}|" "$PROPS"
@@ -99,7 +103,7 @@ jobs:
 
           echo "app.name=${{ inputs.app-name }}" >> "$PROPS"
 
-          # performance tuning
+          # Optional JVM tuning
           sed -i "s|^org\.gradle\.jvmargs=.*|org.gradle.jvmargs=-Xmx4g|" "$PROPS"
 
       # ───────────────────────────────────────────────────────────────
