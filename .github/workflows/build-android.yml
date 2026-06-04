@@ -105,6 +105,16 @@ jobs:
 
           # Optional JVM tuning
           sed -i "s|^org\.gradle\.jvmargs=.*|org.gradle.jvmargs=-Xmx4g|" "$PROPS"
+          
+      # ───────────────────────────────────────────────────────────────
+      # PATCH ANDROID SDK (REQUIRED FOR PLAY)
+      # ───────────────────────────────────────────────────────────────
+      - name: Patch Android SDK versions
+        run: |
+          FILE="love-android/app/build.gradle"
+
+          sed -i 's/minSdkVersion [0-9]\+/minSdkVersion 21/g' "$FILE"
+          sed -i 's/targetSdkVersion [0-9]\+/targetSdkVersion 33/g' "$FILE"
 
       # ───────────────────────────────────────────────────────────────
       # DISABLE SIGNING (CRITICAL FIX)
@@ -120,7 +130,7 @@ jobs:
         if: ${{ inputs.build-apk }}
         run: |
           cd love-android
-          ./gradlew clean assembleEmbedNoRecordRelease \
+          ./gradlew assembleEmbedNoRecordRelease \
             -Pandroid.injected.build.abi=arm64-v8a \
             --no-daemon
 
