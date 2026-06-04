@@ -102,9 +102,9 @@ jobs:
           sed -i 's/targetSdk [0-9]*/targetSdk 34/g'             "$FILE"
           sed -i 's/targetSdkVersion [0-9]*/targetSdkVersion 34/g' "$FILE"
 
-      - name: Disable release signing config
-        run: |
-          sed -i '/signingConfig signingConfigs.release/d' love-android/app/build.gradle
+      #- name: Disable release signing config
+        #run: |
+          #sed -i '/signingConfig signingConfigs.release/d' love-android/app/build.gradle
 
       - name: Build
         run: |
@@ -131,7 +131,18 @@ jobs:
 
           mkdir -p "$GITHUB_WORKSPACE/dist"
           cp "$FILE" "$GITHUB_WORKSPACE/dist/$OUT"
+          
+      - name: Inspect APK
+        if: ${{ inputs.build-type == 'apk' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y aapt
 
+          APK=$(find "$GITHUB_WORKSPACE/dist" -name "*.apk" | head -1)
+
+          echo "APK: $APK"
+          aapt dump badging "$APK"
+          
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
