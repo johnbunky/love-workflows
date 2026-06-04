@@ -25,95 +25,45 @@ on:
         type: boolean
         default: false
 
-    secrets:
-      KEY_ALIAS:
-        required: false
-      KEY_PASSWORD:
-        required: false
-      KEYSTORE_PASSWORD:
-        required: false
-
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-
+      # ───────────────────────────────────────────────────────────────
+      # CHECKOUT
+      # ───────────────────────────────────────────────────────────────
       - name: Checkout game repo
         uses: actions/checkout@v4
 
-      - name: Checkout love-workflows
-        if: ${{ !inputs.build-apk }}
-        uses: actions/checkout@v4
-        with:
-          repository: johnbunky/love-workflows
-          path: love-workflows
-
+      # ───────────────────────────────────────────────────────────────
+      # JAVA
+      # ───────────────────────────────────────────────────────────────
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
+      # ───────────────────────────────────────────────────────────────
+      # PACKAGE GAME
+      # ───────────────────────────────────────────────────────────────
       - name: Pack .love file
         run: |
           zip -9 -r game.love . \
             --include "*.lua" \
-            --include "*.png" --include "*.jpg" --include "*.jpeg" \
-            --include "*.ogg" --include "*.wav" --include "*.mp3" \
-            --include "*.ttf" --include "*.otf" --include "*.fnt" \
-            --include "*.json" --include "*.xml" \
+            --include "*.png" "*.jpg" "*.jpeg" \
+            --include "*.ogg" "*.wav" "*.mp3" \
+            --include "*.ttf" "*.otf" "*.fnt" \
+            --include "*.json" "*.xml" \
             --exclude ".git/*" \
             --exclude ".github/*" \
-            --exclude "android/*" \
-            --exclude "love-workflows/*"
+            --exclude "android/*"
 
-      - name: Generate default icons
-        if: ${{ hashFiles('android/res/**') == '' }}
-        run: |
-          sudo apt-get install -y imagemagick -q
-          for d_size in "mdpi 48" "hdpi 72" "xhdpi 96" "xxhdpi 144" "xxxhdpi 192"; do
-            d=$(echo $d_size | cut -d' ' -f1)
-            s=$(echo $d_size | cut -d' ' -f2)
-            mkdir -p android/res/mipmap-$d
-            convert -size ${s}x${s} xc:#00aaff \
-              -fill white -gravity center \
-              -font DejaVu-Sans -pointsize $((s/3)) \
-              -annotate 0 "LOVE" \
-              android/res/mipmap-$d/ic_launcher.png
-          done
-
-      # ── TEST APK (arm64 only, no signing) ────────────────────────────────────
-      - name: Build APK (test)
-        if: ${{ inputs.build-apk }}
-        uses: love-actions/love-actions-android@v2
-        with:
-          app-name:       ${{ inputs.app-name }}
-          bundle-id:      ${{ inputs.bundle-id }}
-          love-ref:       ${{ inputs.love-ref }}
-          love-package:   ./game.love
-          resource-path:  ./android/res
-          icon-specifier: "@mipmap/ic_launcher"
-          product-name:   ${{ inputs.product-name }}
-          version-string: ${{ inputs.version-string }}
-          version-code:   ${{ github.run_number }}
-          output-folder:  ./dist
-
-      # Fix APK size — rebuild arm64 only after action produces fat APK
-      - name: Rebuild APK arm64 only
-        if: ${{ inputs.build-apk }}
-        run: |
-          cd love-actions-android/love-android
-          ./gradlew assembleEmbedNoRecordRelease \
-            -Pandroid.injected.build.abi=arm64-v8a \
-            --no-daemon
-          APK=$(find . -path "*/embedNoRecord*/*.apk" | head -1)
-          mkdir -p "$GITHUB_WORKSPACE/dist"
-          cp "$APK" "$GITHUB_WORKSPACE/dist/${{ inputs.product-name }}-arm64.apk"
-
-      # ── RELEASE AAB (raw Gradle) ──────────────────────────────────────────────
+      # ───────────────────────────────────────────────────────────────
+      # CLONE ENGINE
+      # ───────────────────────────────────────────────────────────────
       - name: Clone love-android
-        if: ${{ !inputs.build-apk }}
         run: |
           git clone --recurse-submodules \
             --branch "${{ inputs.love-ref }}" \
@@ -121,45 +71,75 @@ jobs:
             https://github.com/love2d/love-android \
             love-android
 
+      # ───────────────────────────────────────────────────────────────
+      # INJECT GAME + RESOURCES
+      # ───────────────────────────────────────────────────────────────
       - name: Inject game.love
-        if: ${{ !inputs.build-apk }}
         run: |
           mkdir -p love-android/app/src/embed/assets
           cp game.love love-android/app/src/embed/assets/game.love
 
-      - name: Copy icons
-        if: ${{ !inputs.build-apk }}
+      - name: Copy resources (if exist)
         run: |
-          cp -r android/res/* love-android/app/src/main/res/
+          if [ -d "android/res" ]; then
+            cp -r android/res/* love-android/app/src/main/res/
+          fi
 
+      # ───────────────────────────────────────────────────────────────
+      # PATCH CONFIG
+      # ───────────────────────────────────────────────────────────────
       - name: Patch app properties
-        if: ${{ !inputs.build-apk }}
         run: |
           PROPS="love-android/gradle.properties"
-          sed -i 's/^app\.name_byte_array/# app.name_byte_array/' "$PROPS"
-          sed -i 's/^#app\.name_byte_array/# app.name_byte_array/' "$PROPS"
+
           sed -i "s|^app\.application_id=.*|app.application_id=${{ inputs.bundle-id }}|" "$PROPS"
           sed -i "s|^app\.version_code=.*|app.version_code=${{ github.run_number }}|" "$PROPS"
           sed -i "s|^app\.version_name=.*|app.version_name=${{ inputs.version-string }}|" "$PROPS"
           sed -i "s|^app\.orientation=.*|app.orientation=landscape|" "$PROPS"
-          echo "app.name=${{ inputs.app-name }}" >> "$PROPS"
-          sed -i "s|^org\.gradle\.jvmargs=.*|org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=512m|" "$PROPS"
-          sed -i "s|minSdk [0-9]*|minSdk 21|" love-android/app/build.gradle
 
-      - name: Build AAB
+          echo "app.name=${{ inputs.app-name }}" >> "$PROPS"
+
+          # performance tuning
+          sed -i "s|^org\.gradle\.jvmargs=.*|org.gradle.jvmargs=-Xmx4g|" "$PROPS"
+
+      # ───────────────────────────────────────────────────────────────
+      # DISABLE SIGNING (CRITICAL FIX)
+      # ───────────────────────────────────────────────────────────────
+      - name: Disable signing
+        run: |
+          sed -i '/signingConfig signingConfigs.release/d' love-android/app/build.gradle
+
+      # ───────────────────────────────────────────────────────────────
+      # BUILD APK (ARM64 ONLY)
+      # ───────────────────────────────────────────────────────────────
+      - name: Build APK (arm64, unsigned)
+        if: ${{ inputs.build-apk }}
+        run: |
+          cd love-android
+          ./gradlew clean assembleEmbedNoRecordRelease \
+            -Pandroid.injected.build.abi=arm64-v8a \
+            --no-daemon
+
+          APK=$(find . -path "*/embedNoRecord*/*.apk" | head -1)
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          cp "$APK" "$GITHUB_WORKSPACE/dist/${{ inputs.product-name }}-arm64.apk"
+
+      # ───────────────────────────────────────────────────────────────
+      # BUILD AAB (UNSIGNED)
+      # ───────────────────────────────────────────────────────────────
+      - name: Build AAB (unsigned)
         if: ${{ !inputs.build-apk }}
         run: |
           cd love-android
-          ./gradlew bundleEmbedNoRecordRelease --no-daemon
+          ./gradlew clean bundleEmbedNoRecordRelease --no-daemon
 
-      - name: Collect AAB
-        if: ${{ !inputs.build-apk }}
-        run: |
-          AAB=$(find love-android -name "*.aab" | head -1)
-          mkdir -p dist
-          cp "$AAB" "dist/${{ inputs.product-name }}-unsigned.aab"
+          AAB=$(find . -name "*.aab" | head -1)
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          cp "$AAB" "$GITHUB_WORKSPACE/dist/${{ inputs.product-name }}-unsigned.aab"
 
-      # ── ARTIFACT ─────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────────────────────────
+      # ARTIFACT
+      # ───────────────────────────────────────────────────────────────
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
