@@ -61,7 +61,22 @@ jobs:
             --exclude ".git/*" \
             --exclude ".github/*" \
             --exclude "android/*"
-
+            
+      - name: Generate default icons
+        if: ${{ hashFiles('android/res/**') == '' }}
+        run: |
+          sudo apt-get install -y imagemagick -q
+          for d_size in "mdpi 48" "hdpi 72" "xhdpi 96" "xxhdpi 144" "xxxhdpi 192"; do
+            d=$(echo $d_size | cut -d' ' -f1)
+            s=$(echo $d_size | cut -d' ' -f2)
+            mkdir -p android/res/mipmap-$d
+            convert -size ${s}x${s} xc:#00aaff \
+              -fill white -gravity center \
+              -font DejaVu-Sans -pointsize $((s/3)) \
+              -annotate 0 "LOVE" \
+              android/res/mipmap-$d/ic_launcher.png
+          done
+          
       # ── APK (love-actions-android — handles NDK, signing, installs directly) ─
       - name: Build APK
         if: ${{ inputs.build-type == 'apk' }}
@@ -71,6 +86,8 @@ jobs:
           bundle-id:      ${{ inputs.bundle-id }}
           love-ref:       ${{ inputs.love-ref }}
           love-package:   ./game.love
+          resource-path:  ./android/res
+          icon-specifier: "@mipmap/ic_launcher"
           product-name:   ${{ inputs.product-name }}
           version-string: ${{ inputs.version-string }}
           version-code:   ${{ github.run_number }}
