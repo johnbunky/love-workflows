@@ -74,7 +74,10 @@ jobs:
         run: |
           mkdir -p love-android/app/src/embed/assets
           cp game.love love-android/app/src/embed/assets/game.love
-
+          
+      - name: Verify inject
+        run: ls -la love-android/app/src/embed/assets/
+        
       - name: Copy icons (if exist)
         run: |
           if [ -d "android/res" ]; then
@@ -91,7 +94,8 @@ jobs:
           sed -i "s|^app\.orientation=.*|app.orientation=landscape|" "$PROPS"
           echo "app.name=${{ inputs.app-name }}" >> "$PROPS"
           sed -i "s|^org\.gradle\.jvmargs=.*|org.gradle.jvmargs=-Xmx4g|" "$PROPS"
-
+          echo "android.injected.testOnly=false" >> "$PROPS"
+          
       - name: Patch SDK levels
         run: |
           FILE="love-android/app/build.gradle"
