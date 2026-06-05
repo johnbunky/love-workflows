@@ -61,42 +61,8 @@ jobs:
             --exclude ".git/*" \
             --exclude ".github/*" \
             --exclude "android/*"
-            
-      - name: Generate default icons
-        if: ${{ hashFiles('android/res/**') == '' }}
-        run: |
-          sudo apt-get install -y imagemagick -q
-          for d_size in "mdpi 48" "hdpi 72" "xhdpi 96" "xxhdpi 144" "xxxhdpi 192"; do
-            d=$(echo $d_size | cut -d' ' -f1)
-            s=$(echo $d_size | cut -d' ' -f2)
-            mkdir -p android/res/mipmap-$d
-            convert -size ${s}x${s} xc:#00aaff \
-              -fill white -gravity center \
-              -font DejaVu-Sans -pointsize $((s/3)) \
-              -annotate 0 "LOVE" \
-              android/res/mipmap-$d/ic_launcher.png
-          done
-          
-      # ── APK (love-actions-android — handles NDK, signing, installs directly) ─
-      - name: Build APK
-        if: ${{ inputs.build-type == 'apk' }}
-        uses: love-actions/love-actions-android@v2
-        with:
-          app-name:       ${{ inputs.app-name }}
-          bundle-id:      ${{ inputs.bundle-id }}
-          love-ref:       ${{ inputs.love-ref }}
-          love-package:   ./game.love
-          resource-path:  ./android/res
-          icon-specifier: "@mipmap/ic_launcher"
-          product-name:   ${{ inputs.product-name }}
-          version-string: ${{ inputs.version-string }}
-          version-code:   ${{ github.run_number }}
-          output-folder:  ./dist
-          build-abi:      arm64-v8a
 
-      # ── AAB (raw Gradle — action doesn't support AAB output) ─────────────────
       - name: Clone love-android
-        if: ${{ inputs.build-type == 'aab' }}
         run: |
           git clone --recurse-submodules \
             --branch "${{ inputs.love-ref }}" \
@@ -105,18 +71,17 @@ jobs:
             love-android
 
       - name: Inject game.love
-        if: ${{ inputs.build-type == 'aab' }}
         run: |
           mkdir -p love-android/app/src/embed/assets
           cp game.love love-android/app/src/embed/assets/game.love
 
-      - name: Copy icons
-        if: ${{ inputs.build-type == 'aab' }}
+      - name: Copy icons (if exist)
         run: |
-          cp -r android/res/* love-android/app/src/main/res/
+          if [ -d "android/res" ]; then
+            cp -r android/res/* love-android/app/src/main/res/
+          fi
 
       - name: Patch gradle.properties
-        if: ${{ inputs.build-type == 'aab' }}
         run: |
           PROPS="love-android/gradle.properties"
           sed -i '/^app\.name_byte_array/d' "$PROPS"
@@ -128,7 +93,6 @@ jobs:
           sed -i "s|^org\.gradle\.jvmargs=.*|org.gradle.jvmargs=-Xmx4g|" "$PROPS"
 
       - name: Patch SDK levels
-        if: ${{ inputs.build-type == 'aab' }}
         run: |
           FILE="love-android/app/build.gradle"
           sed -i 's/minSdk [0-9]*/minSdk 21/g'               "$FILE"
@@ -137,10 +101,40 @@ jobs:
           sed -i 's/targetSdkVersion [0-9]*/targetSdkVersion 34/g' "$FILE"
 
       - name: Disable release signing config
-        if: ${{ inputs.build-type == 'aab' }}
         run: |
           sed -i '/signingConfig signingConfigs.release/d' love-android/app/build.gradle
 
+      # ── APK — arm64, signed with temp debug keystore, installs by tapping ────
+      - name: Create debug keystore
+        if: ${{ inputs.build-type == 'apk' }}
+        run: |
+          keytool \
+            -genkeypair \
+            -alias androiddebugkey \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -keystore love-android/debug.keystore \
+            -storepass android \
+            -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US"
+
+      - name: Build APK
+        if: ${{ inputs.build-type == 'apk' }}
+        run: |
+          cd love-android
+          ./gradlew assembleEmbedNoRecordRelease \
+            -Pandroid.injected.build.abi=arm64-v8a \
+            -Pandroid.injected.signing.store.file=$(pwd)/debug.keystore \
+            -Pandroid.injected.signing.store.password=android \
+            -Pandroid.injected.signing.key.alias=androiddebugkey \
+            -Pandroid.injected.signing.key.password=android \
+            --no-daemon
+          FILE=$(find . -path "*release*.apk" | head -1)
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          cp "$FILE" "$GITHUB_WORKSPACE/dist/${{ inputs.product-name }}.apk"
+
+      # ── AAB — unsigned, sign locally with jarsigner ───────────────────────────
       - name: Build AAB
         if: ${{ inputs.build-type == 'aab' }}
         run: |
