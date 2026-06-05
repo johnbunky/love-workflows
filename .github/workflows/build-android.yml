@@ -62,7 +62,42 @@ jobs:
             --exclude ".github/*" \
             --exclude "android/*"
 
+      # Always generate default icons if android/res doesn't exist
+      # Games with custom icons just put them in android/res/ and this is skipped
+      - name: Generate default icons
+        if: ${{ hashFiles('android/res/**') == '' }}
+        run: |
+          sudo apt-get install -y imagemagick -q
+          for d_size in "mdpi 48" "hdpi 72" "xhdpi 96" "xxhdpi 144" "xxxhdpi 192"; do
+            d=$(echo $d_size | cut -d' ' -f1)
+            s=$(echo $d_size | cut -d' ' -f2)
+            mkdir -p android/res/mipmap-$d
+            convert -size ${s}x${s} xc:#00aaff \
+              -fill white -gravity center \
+              -font DejaVu-Sans -pointsize $((s/3)) \
+              -annotate 0 "LOVE" \
+              android/res/mipmap-$d/ic_launcher.png
+          done
+
+      # ── APK (love-actions-android — handles NDK, signing, installs directly) ─
+      - name: Build APK
+        if: ${{ inputs.build-type == 'apk' }}
+        uses: love-actions/love-actions-android@v2
+        with:
+          app-name:       ${{ inputs.app-name }}
+          bundle-id:      ${{ inputs.bundle-id }}
+          love-ref:       ${{ inputs.love-ref }}
+          love-package:   ./game.love
+          resource-path:  ./android/res
+          icon-specifier: "@mipmap/ic_launcher"
+          product-name:   ${{ inputs.product-name }}
+          version-string: ${{ inputs.version-string }}
+          version-code:   ${{ github.run_number }}
+          output-folder:  ./dist
+
+      # ── AAB (raw Gradle — action doesn't support AAB output) ─────────────────
       - name: Clone love-android
+        if: ${{ inputs.build-type == 'aab' }}
         run: |
           git clone --recurse-submodules \
             --branch "${{ inputs.love-ref }}" \
@@ -71,22 +106,21 @@ jobs:
             love-android
 
       - name: Inject game.love
+        if: ${{ inputs.build-type == 'aab' }}
         run: |
           mkdir -p love-android/app/src/embed/assets
           cp game.love love-android/app/src/embed/assets/game.love
 
-      - name: Copy icons (if exist)
+      - name: Copy icons
+        if: ${{ inputs.build-type == 'aab' }}
         run: |
-          if [ -d "android/res" ]; then
-            cp -r android/res/* love-android/app/src/main/res/
-          fi
+          cp -r android/res/* love-android/app/src/main/res/
 
       - name: Patch gradle.properties
+        if: ${{ inputs.build-type == 'aab' }}
         run: |
           PROPS="love-android/gradle.properties"
-          # Remove conflicting name entry
           sed -i '/^app\.name_byte_array/d' "$PROPS"
-          # Patch values
           sed -i "s|^app\.application_id=.*|app.application_id=${{ inputs.bundle-id }}|" "$PROPS"
           sed -i "s|^app\.version_code=.*|app.version_code=${{ github.run_number }}|" "$PROPS"
           sed -i "s|^app\.version_name=.*|app.version_name=${{ inputs.version-string }}|" "$PROPS"
@@ -95,54 +129,29 @@ jobs:
           sed -i "s|^org\.gradle\.jvmargs=.*|org.gradle.jvmargs=-Xmx4g|" "$PROPS"
 
       - name: Patch SDK levels
+        if: ${{ inputs.build-type == 'aab' }}
         run: |
           FILE="love-android/app/build.gradle"
-          sed -i 's/minSdk [0-9]*/minSdk 21/g'             "$FILE"
+          sed -i 's/minSdk [0-9]*/minSdk 21/g'               "$FILE"
           sed -i 's/minSdkVersion [0-9]*/minSdkVersion 21/g' "$FILE"
-          sed -i 's/targetSdk [0-9]*/targetSdk 34/g'             "$FILE"
+          sed -i 's/targetSdk [0-9]*/targetSdk 34/g'               "$FILE"
           sed -i 's/targetSdkVersion [0-9]*/targetSdkVersion 34/g' "$FILE"
 
       - name: Disable release signing config
+        if: ${{ inputs.build-type == 'aab' }}
         run: |
           sed -i '/signingConfig signingConfigs.release/d' love-android/app/build.gradle
 
-      - name: Build
+      - name: Build AAB
+        if: ${{ inputs.build-type == 'aab' }}
         run: |
           cd love-android
-          TYPE="${{ inputs.build-type }}"
-          echo "Build type: $TYPE"
-
-          if [ "$TYPE" = "apk" ]; then
-            ./gradlew assembleEmbedNoRecordRelease  \
-              -Pandroid.injected.build.abi=arm64-v8a \
-              --no-daemon
-            FILE=$(find . -path "*release*.apk" | head -1)
-            OUT="${{ inputs.product-name }}-release.apk"
-
-          elif [ "$TYPE" = "aab" ]; then
-            ./gradlew bundleEmbedNoRecordRelease --no-daemon
-            FILE=$(find . -name "*.aab" | head -1)
-            OUT="${{ inputs.product-name }}-unsigned.aab"
-
-          else
-            echo "Unknown build type: $TYPE"
-            exit 1
-          fi
-
+          ./gradlew bundleEmbedNoRecordRelease --no-daemon
+          AAB=$(find . -name "*.aab" | head -1)
           mkdir -p "$GITHUB_WORKSPACE/dist"
-          cp "$FILE" "$GITHUB_WORKSPACE/dist/$OUT"
-          
-      - name: Inspect APK
-        if: ${{ inputs.build-type == 'apk' }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y aapt
+          cp "$AAB" "$GITHUB_WORKSPACE/dist/${{ inputs.product-name }}-unsigned.aab"
 
-          APK=$(find "$GITHUB_WORKSPACE/dist" -name "*.apk" | head -1)
-
-          echo "APK: $APK"
-          aapt dump badging "$APK"
-          
+      # ── ARTIFACT ─────────────────────────────────────────────────────────────
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
