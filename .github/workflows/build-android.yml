@@ -102,9 +102,9 @@ jobs:
           sed -i 's/targetSdk [0-9]*/targetSdk 34/g'             "$FILE"
           sed -i 's/targetSdkVersion [0-9]*/targetSdkVersion 34/g' "$FILE"
 
-      #- name: Disable release signing config
-        #run: |
-          #sed -i '/signingConfig signingConfigs.release/d' love-android/app/build.gradle
+      - name: Disable release signing config
+        run: |
+          sed -i '/signingConfig signingConfigs.release/d' love-android/app/build.gradle
 
       - name: Build
         run: |
