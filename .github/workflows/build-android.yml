@@ -102,9 +102,9 @@ jobs:
           sed -i 's/targetSdk [0-9]*/targetSdk 34/g'             "$FILE"
           sed -i 's/targetSdkVersion [0-9]*/targetSdkVersion 34/g' "$FILE"
 
-      #- name: Disable release signing config
-        #run: |
-          #sed -i '/signingConfig signingConfigs.release/d' love-android/app/build.gradle
+      - name: Disable release signing config
+        run: |
+          sed -i '/signingConfig signingConfigs.release/d' love-android/app/build.gradle
 
       - name: Build
         run: |
@@ -113,7 +113,7 @@ jobs:
           echo "Build type: $TYPE"
 
           if [ "$TYPE" = "apk" ]; then
-            ./gradlew assembleEmbedNoRecordDebug \
+            ./gradlew assembleEmbedNoRecordRelease  \
               -Pandroid.injected.build.abi=arm64-v8a \
               --no-daemon
             FILE=$(find . -path "*debug*.apk" | head -1)
